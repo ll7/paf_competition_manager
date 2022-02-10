@@ -65,7 +65,7 @@ world = client.load_world('Town05')
 
 ```shell
 cd carla0.9.10.1/PythonAPI/examples/
-python spawn_npc.py -n 200 -w 0
+python spawn_npc.py -n 50 -w 50 -s 256
 ```
 
 9. `rosparam set /competition/traffic_rules false`
