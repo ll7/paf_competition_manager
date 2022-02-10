@@ -1,7 +1,5 @@
 # Competition Manger
 
-based on [paf/paf_competition_manager at main · ll7/paf](https://github.com/ll7/paf/tree/main/paf_competition_manager).
-
 A first draft for the implementation for the final competition in the autonomous driving internship (PAF).
 
 ## Clone, Link, Build
