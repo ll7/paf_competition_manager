@@ -1,66 +1,79 @@
 #! /usr/bin/env python3
 
+from dataclasses import dataclass
+
 import rospy
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point
 
 
-def get_distance(A: Point, B: Point):
+def get_distance(p_1: Point, p_2_: Point):
     """
     return distance of two points
     """
-    return ((A.x - B.x) ** 2 + (A.y - B.y) ** 2 + (A.z - B.z) ** 2) ** 0.5
+    return ((p_1.x - p_2_.x) ** 2 + (p_1.y - p_2_.y) ** 2 + (p_1.z - p_2_.z) ** 2) ** 0.5
 
 
-def callback(data):
-    rospy.logdebug(data)
-    current_postion = data.pose.pose.position
-    goal_position = Point(
-        x=rospy.get_param('competition/goal/position/x'),
-        y=rospy.get_param('competition/goal/position/y'),
-        z=rospy.get_param('competition/goal/position/z'))
-    distance_to_goal = get_distance(current_postion, goal_position)
-    
-    start_position = Point(
-        x=rospy.get_param('competition/start/position/x'),
-        y=rospy.get_param('competition/start/position/y'),
-        z=rospy.get_param('competition/start/position/z'))
-    distance_to_start = get_distance(current_postion, start_position)
+@dataclass
+class CompetitionManagerNode:
+    start_position: Point = None
+    goal_position: Point = None
+    start_time: float = None
+    end_time: float = None
+    started: bool = False
+    finished: bool = False
 
-    if not rospy.get_param('competition/finished'):
-        rospy.loginfo('distance to goal: {}'.format(distance_to_goal))
-        rospy.loginfo('distance to start: {}'.format(distance_to_start))
-    
-    if not rospy.get_param('competition/started'):
-        if distance_to_start > 0.5:
-            rospy.set_param('competition/started', True)
-            rospy.set_param(
-                'competition/start_time', rospy.get_rostime().to_sec())
-            rospy.logwarn(
-                'competition started at: {}'.format(
-                    rospy.get_param('/competition/start_time')))
+    def __post_init__(self):
+        while self.goal_position is None or self.start_position is None:
+            try:
+                self.goal_position = Point(
+                    x=rospy.get_param('competition/goal/position/x'),
+                    y=rospy.get_param('competition/goal/position/y'),
+                    z=rospy.get_param('competition/goal/position/z'))
 
-    if rospy.get_param('competition/started') and not rospy.get_param('competition/finished'):
-        if distance_to_goal < 1.0:
-            rospy.set_param('competition/finished', True)
-            rospy.set_param(
-                'competition/finish_time', rospy.get_rostime().to_sec())
-            duration = (rospy.get_param('competition/finish_time')
-                - rospy.get_param('competition/start_time'))
-            rospy.set_param('competition/duration', duration)
-            rospy.logwarn(
-                'The competition was completed in {} seconds'.format(duration))
+                self.start_position = Point(
+                    x=rospy.get_param('competition/start/position/x'),
+                    y=rospy.get_param('competition/start/position/y'),
+                    z=rospy.get_param('competition/start/position/z'))
+            except rospy.ServiceException as service_error:
+                print(f'Ros param not ready! Error: {service_error}')
+        print(f'Start {self.start_position}; End {self.goal_position}')
+
+    def callback(self, data: Odometry):
+        rospy.logdebug(data)
+        current_position = data.pose.pose.position
+        print(f'Current_pos_competition: {current_position}')
+        distance_to_goal = get_distance(current_position, self.goal_position)
+        distance_to_start = get_distance(current_position, self.start_position)
+
+        if self.finished:
+            return
+
+        print(f'distance to goal: {distance_to_goal}')
+        print(f'distance to start: {distance_to_start}')
+
+        if not self.started and distance_to_start > 0.5:
+            self.started = True
+            self.start_time = rospy.get_rostime().to_sec()
+            print(f'competition started at: {self.start_time}')
+
+        if self.started and distance_to_goal < 1.0:
+            self.finished = True
+            self.end_time = rospy.get_rostime().to_sec()
+            duration = self.end_time - self.start_time
+            print(f'The competition was completed in {duration} seconds')
+
+    def run_node(self):
+        rospy.init_node('competition_manager')
+        rospy.Subscriber("carla/ego_vehicle/odometry", Odometry, self.callback)
+        rospy.spin()
 
 
+def main():
+    print('Init competition_manager')
+    competition_manager = CompetitionManagerNode()
+    competition_manager.run_node()
 
-def competition_manager():
-    rospy.init_node('competion_manager')
-    rospy.Subscriber("carla/ego_vehicle/odometry", Odometry, callback)
-    rospy.set_param('competition/ready_for_ego', True)
-    rospy.spin()
-    
+
 if __name__ == '__main__':
-    print('Init competion_manager')
-    rospy.set_param('competition/started', False)
-    rospy.set_param('competition/finished', False)
-    competition_manager()
+    main()
